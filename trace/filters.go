@@ -2,6 +2,7 @@ package trace
 
 import (
 	"regexp"
+	"strings"
 
 	"github.com/akitasoftware/akita-cli/learn"
 	"github.com/akitasoftware/akita-libs/akid"
@@ -9,18 +10,23 @@ import (
 	"github.com/akitasoftware/akita-libs/trackers"
 )
 
+func compileRegex(matchers []*regexp.Regexp) *regexp.Regexp {
+	matchersStr := make([]string, 0, len(matchers))
+	for _, r := range matchers {
+		matchersStr = append(matchersStr, r.String())
+	}
+	ret, _ := regexp.Compile(strings.Join(matchersStr, "|"))
+	return ret
+}
+
 // Filters out HTTP paths.
-// TODO: compile the N regular expressions into one for efficiency.
 func NewHTTPPathFilterCollector(matchers []*regexp.Regexp, col Collector) Collector {
 	return &genericRequestFilter{
 		Collector: col,
 		filterFunc: func(r akinet.HTTPRequest) bool {
 			if r.URL != nil {
-				for _, m := range matchers {
-					if m.MatchString(r.URL.Path) {
-						return false
-					}
-				}
+				compiledRegex := compileRegex(matchers)
+				return !compiledRegex.MatchString(r.URL.Path)
 			}
 			return true
 		},
@@ -32,28 +38,20 @@ func NewHTTPHostFilterCollector(matchers []*regexp.Regexp, col Collector) Collec
 	return &genericRequestFilter{
 		Collector: col,
 		filterFunc: func(r akinet.HTTPRequest) bool {
-			for _, m := range matchers {
-				if m.MatchString(r.Host) {
-					return false
-				}
-			}
-			return true
+			compiledRegex := compileRegex(matchers)
+			return !compiledRegex.MatchString(r.Host)
 		},
 	}
 }
 
 // Allows only matching paths
-// TODO: compile the N regular expressions into one for efficiency.
 func NewHTTPPathAllowlistCollector(matchers []*regexp.Regexp, col Collector) Collector {
 	return &genericRequestFilter{
 		Collector: col,
 		filterFunc: func(r akinet.HTTPRequest) bool {
 			if r.URL != nil {
-				for _, m := range matchers {
-					if m.MatchString(r.URL.Path) {
-						return true
-					}
-				}
+				compiledRegex := compileRegex(matchers)
+				return compiledRegex.MatchString(r.URL.Path)
 			}
 			return false
 		},
@@ -65,12 +63,8 @@ func NewHTTPHostAllowlistCollector(matchers []*regexp.Regexp, col Collector) Col
 	return &genericRequestFilter{
 		Collector: col,
 		filterFunc: func(r akinet.HTTPRequest) bool {
-			for _, m := range matchers {
-				if m.MatchString(r.Host) {
-					return true
-				}
-			}
-			return false
+			compiledRegex := compileRegex(matchers)
+			return compiledRegex.MatchString(r.URL.Path)
 		},
 	}
 }
